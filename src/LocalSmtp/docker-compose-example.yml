@@ -1,0 +1,22 @@
+version: '3.1'
+services:
+  localsmtprelay:
+    image: eric1901/localsmtprelay:1.0-net5-buster-slim
+    ports:
+     - "25:25/tcp"
+    environment:
+     - 'SmtpForwarder__Authentication__PasswordFile=/run/secrets/smtp_password'
+    volumes:
+      - './var/tmp/localsmtprelay-msgs:/var/tmp/localsmtprelay-msgs'
+      - './var/appsettings.json:/app/appsettings.json'
+    secrets:
+      - smtp_password
+    networks:
+      - my-attachable-overlay
+secrets:
+  smtp_password:
+    external: true      
+networks:
+  my-attachable-overlay:
+    external:
+      name: my-attachable-overlay

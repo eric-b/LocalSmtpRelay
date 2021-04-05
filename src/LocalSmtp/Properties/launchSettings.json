@@ -1,0 +1,16 @@
+{
+  "profiles": {
+    "LocalSmtpRelay": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development",
+        // SMTP on 26 to allow debug from VS while actual app is deployed in docker (on port 25).
+        "SmtpServer__Ports__0__Number": "26"
+      },
+      "dotnetRunMessages": "true"
+    },
+    "Docker": {
+      "commandName": "Docker"
+    }
+  }
+}

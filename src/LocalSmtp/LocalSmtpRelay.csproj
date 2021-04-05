@@ -1,0 +1,42 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net5.0</TargetFramework>
+    <UserSecretsId>dotnet-LocalSmtp-A6DEC9E5-56F7-418D-A080-E5422B326CA9</UserSecretsId>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <DockerfileContext>.</DockerfileContext>
+    <Nullable>enable</Nullable>
+    <Authors>Eric Boumendil</Authors>
+    <Company />
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <DockerfileRunArguments>-p 25:25</DockerfileRunArguments>
+    <Version>0.9.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="var\**" />
+    <Content Remove="var\**" />
+    <EmbeddedResource Remove="var\**" />
+    <None Remove="var\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Microsoft.Extensions.Configuration.UserSecrets: direct reference as workaround for docker debug from VS
+    (https://github.com/dotnet/extensions/issues/2743#issuecomment-562264614) 
+    But this does not work either! See currently open issue https://github.com/dotnet/runtime/issues/36062 -->
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="5.0.0" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="5.0.0" />
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.10.9" />
+    <PackageReference Include="MailKit" Version="2.11.0" />
+    <PackageReference Include="Nito.AsyncEx" Version="5.1.0" />
+    <PackageReference Include="SmtpServer" Version="8.0.5" />
+    <PackageReference Include="MediatR.Extensions.Microsoft.DependencyInjection" Version="9.0.0" />
+    <PackageReference Include="FluentValidation" Version="9.5.3" />
+    <PackageReference Include="IL.FluentValidation.Extensions.Options" Version="9.0.13" />
+  </ItemGroup>
+</Project>
