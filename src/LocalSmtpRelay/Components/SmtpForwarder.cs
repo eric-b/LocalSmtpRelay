@@ -14,6 +14,7 @@ using MimeKit;
 using MailKit.Security;
 using MediatR;
 using Nito.AsyncEx;
+using System.Collections.Generic;
 
 namespace LocalSmtpRelay.Components
 {
@@ -36,7 +37,6 @@ namespace LocalSmtpRelay.Components
         private int _disposeCount;
         private bool _isFirstConnect = true;
 
-
         sealed class SmtpClientLogger : MailKit.IProtocolLogger
         {
             private readonly ILogger _logger;
@@ -49,13 +49,28 @@ namespace LocalSmtpRelay.Components
             public void Dispose() { }
 
             public void LogClient(byte[] buffer, int offset, int count)
-                => _logger.LogDebug($"Sent {count} bytes");
+                => _logger.LogDebug("Sent {Count} bytes", count);
 
             public void LogConnect(Uri uri)
-                => _logger.LogInformation($"Connection to {uri}");
+                => _logger.LogInformation("Connection to {Uri}", uri);
 
             public void LogServer(byte[] buffer, int offset, int count)
-                => _logger.LogDebug($"Received {count} bytes");
+                => _logger.LogDebug("Received {Count} bytes", count);
+
+            public MailKit.IAuthenticationSecretDetector AuthenticationSecretDetector { get; set; } = EmptySmtpAuthenticationSecretDetector.Instance;
+
+            sealed class EmptySmtpAuthenticationSecretDetector : MailKit.IAuthenticationSecretDetector
+            {
+                public static readonly EmptySmtpAuthenticationSecretDetector Instance = new();
+
+                private static readonly List<MailKit.AuthenticationSecret> EmptyList = [];
+
+                private EmptySmtpAuthenticationSecretDetector()
+                {
+                }
+
+                public IList<MailKit.AuthenticationSecret> DetectSecrets(byte[] buffer, int offset, int count) => EmptyList;
+            }
         }
 
         public SmtpForwarder(IOptionsMonitor<SmtpForwarderOptions> options,
@@ -99,7 +114,7 @@ namespace LocalSmtpRelay.Components
             catch (Exception ex)
             {
                 if (ex is not OperationCanceledException)
-                    _logger.LogError(ex, $"{nameof(BackgroundSendFromQueue)} failed.");
+                    _logger.LogError(ex, "BackgroundSendFromQueue failed.");
             }
         }
 
@@ -109,23 +124,23 @@ namespace LocalSmtpRelay.Components
                 return;
             try
             {
-                MimeMessage message = await MimeMessage.LoadAsync(file.FullName).ConfigureAwait(continueOnCapturedContext: false);
+                using MimeMessage message = await MimeMessage.LoadAsync(file.FullName, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
                 string? defaultRecipient = _options.CurrentValue.DefaultRecipient;
                 if (message.To.Count == 0)
                 {
                     if (defaultRecipient != null)
                     {
-                        _logger.LogDebug($"Set default recipient: To:{defaultRecipient} Subject:{message.Subject}");
+                        _logger.LogDebug("Set default recipient: To:{DefaultRecipient} Subject:{Subject}", defaultRecipient, message.Subject);
                         message.To.Add(MailboxAddress.Parse(defaultRecipient));
                     }
                     else
                     {
-                        _logger.LogWarning($"No default recipient for message: {message.Subject}");
+                        _logger.LogWarning("No default recipient for message: {Subject}", message.Subject);
                         return;
                     }
                 }
 
-                if (await _smtpClientSemaphore.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(continueOnCapturedContext: false))
+                if (await _smtpClientSemaphore.WaitAsync(TimeSpan.FromSeconds(10), cancellationToken).ConfigureAwait(continueOnCapturedContext: false))
                 {
                     try
                     {
@@ -136,18 +151,18 @@ namespace LocalSmtpRelay.Components
 
                         if (_options.CurrentValue.Disable)
                         {
-                            _logger.LogWarning($"Message not sent because forwarder is disabled: To:{message.To} Subject:{message.Subject}");
+                            _logger.LogWarning("Message not sent because forwarder is disabled: To:{To} Subject:{Subject}", message.To, message.Subject);
                             return;
                         }
                         await _smtpClient.SendAsync(message).ConfigureAwait(continueOnCapturedContext: false);
                         if (!Utility.TryDeleteFile(file))
-                            _logger.LogWarning($"Failed to delete: {file}");
+                            _logger.LogWarning("Failed to delete: {File}", file);
 
-                        _logger.LogInformation($"{nameof(SmtpForwarder)} sent message to {message.To}: {message.Subject}");
+                        _logger.LogInformation("SmtpForwarder sent message to {To}: {Subject}", message.To, message.Subject);
                         if (!_smtpClientIdleTimer.Change(_idleDelay, Timeout.InfiniteTimeSpan))
                         {
                             // Should not happen
-                            await _smtpClient.DisconnectAsync(quit: true).ConfigureAwait(continueOnCapturedContext: false);
+                            await _smtpClient.DisconnectAsync(quit: true, CancellationToken.None).ConfigureAwait(continueOnCapturedContext: false);
                         }
                     }
                     finally
@@ -158,7 +173,7 @@ namespace LocalSmtpRelay.Components
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Failed to send message {file}");
+                _logger.LogError(ex, "Failed to send message {File}", file);
                 if (ex is SocketException)
                 {
                     _pendingMessagesFromSocketFailures.Enqueue(file);
@@ -168,7 +183,9 @@ namespace LocalSmtpRelay.Components
                         _smtpClientIdleTimer.Change(_idleDelay, Timeout.InfiniteTimeSpan);
                     }
                     catch
-                    { }
+                    { 
+                        // Ignore any error on timer schedule.
+                    }
                 }
             }
         }
@@ -188,6 +205,7 @@ namespace LocalSmtpRelay.Components
                 }
                 catch
                 {
+                    // Ignore any error on timer schedule.
                 }
             }
 
@@ -196,13 +214,13 @@ namespace LocalSmtpRelay.Components
             {
                 try
                 {
-                    _logger.LogInformation($"New attempt: {file.Name}");
+                    _logger.LogInformation("New attempt: {Name}", file.Name);
                     AsyncContext.Run(() => ProcessSend(file, default));
                     catchUpCount++;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, $"Failed new send attempt: {file.Name}");
+                    _logger.LogError(ex, "Failed new send attempt: {Name}", file.Name);
                 }
             }
             if (catchUpCount != 0)
@@ -231,14 +249,14 @@ namespace LocalSmtpRelay.Components
                 }
                 catch
                 {
+                    // Ignore any error on timer schedule.
                 }
             }
         }
 
         public void Enqueue(FileInfo message, CancellationToken cancellationToken)
         {
-            if (_disposeCount != 0)
-                throw new ObjectDisposedException(nameof(SmtpForwarder));
+            ObjectDisposedException.ThrowIf(_disposeCount != 0, this);
 
             _queue.Add(message, cancellationToken);
         }
@@ -300,7 +318,7 @@ namespace LocalSmtpRelay.Components
             _bgSendTask.Dispose();
             _smtpClientSemaphore.Dispose();
             _queue.Dispose();
-            _logger.LogInformation($"{nameof(SmtpForwarder)} disposed");
+            _logger.LogInformation("SmtpForwarder disposed");
         }
 
         private async Task Connect(CancellationToken cancellationToken)
@@ -316,7 +334,7 @@ namespace LocalSmtpRelay.Components
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, $"Failed to connect to {options.Hostname}:{options.Port ?? 25}.");
+                    _logger.LogError(ex, "Failed to connect to {Hostname}:{Port}.", options.Hostname, options.Port ?? 25);
                     if (ex is not SocketException && _isFirstConnect)
                     {
                         _firstConnectError = true;
@@ -333,7 +351,7 @@ namespace LocalSmtpRelay.Components
                     }
                     catch (AuthenticationException authException)
                     {
-                        _logger.LogError(authException, $"Authentication to {options.Hostname} failed. Check settings.");
+                        _logger.LogError(authException, "Authentication to {Hostname} failed. Check settings.", options.Hostname);
                         _firstConnectError = true;
                         await _publisher.Publish(new Model.SmtpForwarderFailed(), cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
                     }
@@ -343,24 +361,22 @@ namespace LocalSmtpRelay.Components
 
         private static NetworkCredential CreateCredentials(SmtpForwarderOptions.AuthenticationParameters parameters)
         {
-            if (parameters is null)
-                throw new ArgumentNullException(nameof(parameters));
+            ArgumentNullException.ThrowIfNull(parameters);
+
             if (!string.IsNullOrEmpty(parameters.PasswordFile))
             {
                 if (!File.Exists(parameters.PasswordFile))
                     throw new FileNotFoundException($"{nameof(parameters.PasswordFile)} not found.", parameters.PasswordFile);
 
-                using (var fs = File.Open(parameters.PasswordFile, FileMode.Open, FileAccess.Read, FileShare.Read))
+                using var fs = File.Open(parameters.PasswordFile, FileMode.Open, FileAccess.Read, FileShare.Read);
+                var buffer = new byte[1];
+                var secret = new SecureString();
+                while (fs.Read(buffer, 0, 1) == 1)
                 {
-                    var buffer = new byte[1];
-                    var secret = new SecureString();
-                    while (fs.Read(buffer, 0, 1) == 1)
-                    {
-                        secret.AppendChar((char)buffer[0]);
-                    }
-                    secret.MakeReadOnly();
-                    return new NetworkCredential(parameters.Username, secret);
+                    secret.AppendChar((char)buffer[0]);
                 }
+                secret.MakeReadOnly();
+                return new NetworkCredential(parameters.Username, secret);
             }
             return new NetworkCredential(parameters.Username, parameters.Password);
         }

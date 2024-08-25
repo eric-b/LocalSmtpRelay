@@ -13,5 +13,7 @@ namespace LocalSmtpRelay.Components
         }
 
         public Account[]? Accounts { get; set; }
+
+        public bool AllowAnonymous { get; set; }
     }
 }

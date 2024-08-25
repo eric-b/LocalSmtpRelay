@@ -3,10 +3,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
-using MediatR;
 using SmtpServer.Authentication;
 using IL.FluentValidation.Extensions.Options;
 using LocalSmtpRelay.Components;
+using LocalSmtpRelay.Components.MediatrHandlers;
 
 namespace LocalSmtpRelay.Startup
 {
@@ -14,7 +14,7 @@ namespace LocalSmtpRelay.Startup
     {
         public static void ConfigureServices(HostBuilderContext builderContext, IServiceCollection services)
         {
-            services.AddMediatR(typeof(Startup));
+            services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<SendRequestHandler>());
 
             services.AddHostedService<SmtpServerBackgroundService>();
             
@@ -43,17 +43,18 @@ namespace LocalSmtpRelay.Startup
                 builderContext.Configuration.GetSection(AppSettings.Sections.SmtpServer).Bind(smtpBuilderOptions);
                 var builder = new SmtpServer.SmtpServerOptionsBuilder();
                 builder.ServerName(smtpBuilderOptions.Hostname ?? "localhost");
-                var portDesc = smtpBuilderOptions.Ports ?? new SmtpServerBuilderOptions.Port[] { 25 };
-                bool requireAuth = s.GetRequiredService<IOptions<SmtpServerUserAuthenticatorOptions>>().Value.Accounts?.Length > 0;
+                var portDesc = smtpBuilderOptions.Ports ?? [25];
+                var options = s.GetRequiredService<IOptions<SmtpServerUserAuthenticatorOptions>>().Value;
+                bool requireAuth = options.Accounts?.Length > 0 && !options.AllowAnonymous;
                 builder.MaxAuthenticationAttempts(2);
                 foreach (var port in portDesc)
                 {
                     builder.Endpoint(o =>
                     {
                         o.Port(port.Number, port.IsSecure);
+                        o.AllowUnsecureAuthentication();
                         if (requireAuth)
                         {
-                            o.AllowUnsecureAuthentication();
                             o.AuthenticationRequired();
                         }
                     });

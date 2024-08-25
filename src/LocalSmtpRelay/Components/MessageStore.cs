@@ -36,7 +36,7 @@ namespace LocalSmtpRelay.Components
             _inprocSender = inprocSender ?? throw new ArgumentNullException(nameof(inprocSender));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _options = options ?? throw new ArgumentNullException(nameof(options));
-            logger.LogInformation($"Store directory: {_options.CurrentValue.Directory}");
+            logger.LogInformation("Store directory: {Directory}", _options.CurrentValue.Directory);
         }
 
         public async Task<SmtpResponse> SaveAsync(ISessionContext context, IMessageTransaction transaction, ReadOnlySequence<byte> buffer, CancellationToken cancellationToken)
@@ -47,7 +47,7 @@ namespace LocalSmtpRelay.Components
             MessageStoreOptions currentOptions = _options.CurrentValue;
             if (buffer.Length > currentOptions.MaxMessageLengthBytes)
             {
-                _logger.LogWarning($"{nameof(SmtpResponses.SizeLimitExceeded)}: {buffer.Length} bytes exceeds {currentOptions.MaxMessageLengthBytes}. Destination: {string.Join(", ", transaction.To.Select(t => $"{t.User}@{t.Host}"))}");
+                _logger.LogWarning("SizeLimitExceeded: {BufferLength} bytes exceeds {MaxMessageLengthBytes}. Destination: {Destinations}", buffer.Length, currentOptions.MaxMessageLengthBytes, string.Join(", ", transaction.To.Select(t => $"{t.User}@{t.Host}")));
                 return SmtpResponses.SizeLimitExceeded;
             }
 
@@ -58,20 +58,20 @@ namespace LocalSmtpRelay.Components
                 {
                     if (!addrWhitelist.Contains($"{to.User}@{to.Host}"))
                     {
-                        _logger.LogWarning($"{nameof(SmtpResponses.MailboxUnavailable)}: at least one destination is not included in whitelist: {string.Join(", ", transaction.To.Select(t => $"{t.User}@{t.Host}"))}");
+                        _logger.LogWarning("MailboxUnavailable: at least one destination is not included in whitelist: {Whitelist}", string.Join(", ", transaction.To.Select(t => $"{t.User}@{t.Host}")));
                         return SmtpResponses.MailboxUnavailable;
                     }
                 }
                 if (currentOptions.RejectEmptyRecipient && transaction.To.Count == 0)
                 {
-                    _logger.LogWarning($"{nameof(SmtpResponses.BadEmailAddress)}: at least one recipient must be specified ({context.Authentication?.User}).");
+                    _logger.LogWarning("BadEmailAddress: at least one recipient must be specified ({User}).", context.Authentication?.User);
                     return SmtpResponses.BadEmailAddress;
                 }
             }
 
             string fileId = Guid.NewGuid().ToString() + ".mime";
             var filepath = Path.Combine(currentOptions.Directory, $"{transaction.From.User}@{transaction.From.Host}", fileId);
-            _logger.LogDebug($"Storing message {filepath}");
+            _logger.LogDebug("Storing message {Filepath}", filepath);
             var file = new FileInfo(filepath);
             file.Directory!.Create();
             using (FileStream fs = file.Open(FileMode.CreateNew, FileAccess.Write, FileShare.None))
@@ -90,8 +90,8 @@ namespace LocalSmtpRelay.Components
             }
             else
             {
-                MimeMessage message = await MimeMessage.LoadAsync(file.FullName, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-                _logger.LogWarning($"Too many requests - Message not sent: {message.From} -> {message.To} ({message.Subject}, {fileId})");
+                using MimeMessage message = await MimeMessage.LoadAsync(file.FullName, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+                _logger.LogWarning("Too many requests - Message not sent: {From} -> {To} ({Subject}, {FileId})", message.From, message.To, message.Subject, fileId);
                 if (currentOptions.DeleteRejectedMessages)
                     Utility.TryDeleteFile(file);
 
@@ -107,7 +107,7 @@ namespace LocalSmtpRelay.Components
             MessageStoreOptions currentOptions = _options.CurrentValue;
             string fileId = Guid.NewGuid().ToString() + ".mime";
             var filepath = Path.Combine(currentOptions.Directory, ((MailboxAddress)message.From[0]).Address, fileId);
-            _logger.LogDebug($"Storing message {filepath}");
+            _logger.LogDebug("Storing message {Filepath}", filepath);
             var file = new FileInfo(filepath);
             file.Directory!.Create();
             await message.WriteToAsync(filepath, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
@@ -115,7 +115,7 @@ namespace LocalSmtpRelay.Components
             SendResponse response = await _inprocSender.Send(new SendRequest(file), cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             if (!response.IsSuccess)
             {
-                _logger.LogWarning($"Message not sent: {message.From} -> {message.To} ({message.Subject}, {fileId})");
+                _logger.LogWarning("Message not sent: {From} -> {To} ({Subject}, {FileId})", message.From, message.To, message.Subject, fileId);
                 if (currentOptions.DeleteRejectedMessages)
                     Utility.TryDeleteFile(file);
             }
@@ -138,14 +138,14 @@ namespace LocalSmtpRelay.Components
                     FileInfo[] files = new DirectoryInfo(currentOptions.Directory).GetFiles("*.mime", SearchOption.AllDirectories);
                     if (files.Length != 0 && !cancellationToken.IsCancellationRequested)
                     {
-                        _logger.LogInformation($"Processing messages stored from previous session...");
+                        _logger.LogInformation("Processing messages stored from previous session...");
                         await _inprocSender.Send(new SendCatchUpRequest(files), cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
                     }
                 }
                 catch (Exception ex)
                 {
                     if (ex is not OperationCanceledException)
-                        _logger.LogError(ex, $"Failed to process existing messages stored from previous application session.");
+                        _logger.LogError(ex, "Failed to process existing messages stored from previous application session.");
                 }
             }
         }

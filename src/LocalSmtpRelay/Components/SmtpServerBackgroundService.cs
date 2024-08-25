@@ -35,7 +35,7 @@ namespace LocalSmtpRelay.Components
             _server.SessionCompleted -= OnSessionCompleted;
             _server.SessionFaulted -= OnSessionFaulted;
             base.Dispose();
-            _logger.LogInformation($"{nameof(SmtpServerBackgroundService)} disposed.");
+            _logger.LogInformation("SmtpServerBackgroundService disposed.");
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -43,29 +43,31 @@ namespace LocalSmtpRelay.Components
             await _startupPhase.CatchUpStoredMessages(stoppingToken).ConfigureAwait(continueOnCapturedContext: false);
             await _startupPhase.SmtpServerStarting(stoppingToken).ConfigureAwait(continueOnCapturedContext: false);
 
-            _logger.LogInformation($"Starting SMTP server");
+            _logger.LogInformation("Starting SMTP server");
             await _server.StartAsync(stoppingToken).ConfigureAwait(continueOnCapturedContext: false);
         }
 
         private void OnSessionCreated(object? sender, SessionEventArgs e)
         {
-            _logger.LogDebug($"Session created");
+            _logger.LogDebug("Session created");
         }
 
         private void OnSessionFaulted(object? sender, SessionFaultedEventArgs e)
         {
             // Debug and not Error: allows to easily ignore these noisy messages.
-            _logger.LogDebug($"Session faulted (user: {e.Context.Authentication.User}) - {e.Exception}");
+#pragma warning disable S6668 // Logging arguments should be passed to the correct parameter
+            _logger.LogDebug("Session faulted (user: {User}) - {Exception}", e.Context.Authentication.User, e.Exception);
+#pragma warning restore S6668 // Logging arguments should be passed to the correct parameter
         }
 
         private void OnSessionCompleted(object? sender, SessionEventArgs e)
         {
-            _logger.LogInformation($"Session completed (user: {e.Context.Authentication.User})");
+            _logger.LogInformation("Session completed (user: {User})", e.Context.Authentication.User);
         }
 
         private void OnSessionCancelled(object? sender, SessionEventArgs e)
         {
-            _logger.LogInformation($"Session cancelled (user: {e.Context.Authentication.User})");
+            _logger.LogInformation("Session cancelled (user: {User})", e.Context.Authentication.User);
         }
     }
 }

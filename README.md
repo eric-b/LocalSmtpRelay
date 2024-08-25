@@ -1,6 +1,6 @@
 # LocalSmtpRelay
 
-*LocalSmtpRelay* purpose is to act as a simple SMTP relay to another SMTP.
+*LocalSmtpRelay* purpose is to act as a simple local SMTP relay to another remote SMTP.
 
 It has been made to easily provide access to an SMTP server for services running on (trusted) local network (LAN) without having to give real account password to these services. For example, if you want to use Gmail's SMTP, you would need to give access to your account to any program requiring your SMTP settings. This access allows not only to send emails but also to read them (with proper IMAP or POP3 settings). The idea of this program is to set your actual account password only in one place (this SMTP relay), and to make other services to send emails through this SMTP relay.
 
@@ -104,9 +104,9 @@ printf "your password" | docker secret create smtp_password -
 
 ### Clone repository and setup docker-compose
 
-Strictly speaking, you do not need to clone this entire repository. You'll just need (from directory */src/LocalSmtp*):
+Strictly speaking, you do not need to clone this entire repository. You'll just need:
 
-- docker-compose-example.yml
+- /src/docker-compose-example.yml
 - /var/appsettings.json
 
 **So you can clone this repository or just download aforementioned files.**
@@ -168,6 +168,7 @@ Main settings in `appsettings.json` are:
     - `Username`: username
     - `PasswordFile`: path of file containing password (if not set, `Password` will be read).
     - `Password`: password.
+  - `AllowAnonymous`: `true` or `false`. If `true`, any client can send email without any authentication, or if authentication command is sent, wrong user/passwords are allowed.
 - `SmtpForwarder`: Configures SMTP client settings for sending messages.
   - `DefaultRecipient`: should be your email address.
   - `Disable`: `true`/`false` - if `true`, no message will be sent until this flag is set to `false` (or removed).

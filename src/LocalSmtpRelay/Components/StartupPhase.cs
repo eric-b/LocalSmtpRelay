@@ -26,7 +26,7 @@ namespace LocalSmtpRelay.Components
         {
             if (_sendMsgAtStartup.To != null && _sendMsgAtStartup.Subject != null)
             {
-                _logger.LogInformation($"Sending startup notification to {_sendMsgAtStartup.To}");
+                _logger.LogInformation("Sending startup notification to {To}", _sendMsgAtStartup.To);
                 try
                 {
                     var message = new MimeMessage();

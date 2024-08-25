@@ -16,7 +16,7 @@ namespace LocalSmtpRelay.Components
         private Account[] _accounts;
         private readonly ReaderWriterLockSlim _accountLock;
         private readonly IOptionsMonitor<SmtpServerUserAuthenticatorOptions> _options;
-        private readonly IDisposable _optionsListener;
+        private readonly IDisposable? _optionsListener;
 
         public sealed class Factory : IUserAuthenticatorFactory, IDisposable
         {
@@ -49,21 +49,20 @@ namespace LocalSmtpRelay.Components
 #pragma warning restore CS8618
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _options = options ?? throw new ArgumentNullException(nameof(options)); ;
+            _options = options ?? throw new ArgumentNullException(nameof(options));
             _accountLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
             _optionsListener = _options.OnChange(OnSmtpServerUserAuthenticatorOptionsChanged);
             UpdateAccounts(_options.CurrentValue, throwErrors: true);
         }
 
-        private void OnSmtpServerUserAuthenticatorOptionsChanged(SmtpServerUserAuthenticatorOptions options, string name)
+        private void OnSmtpServerUserAuthenticatorOptionsChanged(SmtpServerUserAuthenticatorOptions options, string? name)
         {
             UpdateAccounts(options, throwErrors: false);
         }
 
         private static Account MapToAccount(SmtpServerUserAuthenticatorOptions.Account accountOptions)
         {
-            if (accountOptions is null)
-                throw new ArgumentNullException(nameof(accountOptions));
+            ArgumentNullException.ThrowIfNull(accountOptions);
             if (string.IsNullOrEmpty(accountOptions.Username))
                 throw new ArgumentOutOfRangeException(nameof(accountOptions), "Username must be set.");
 
@@ -88,7 +87,7 @@ namespace LocalSmtpRelay.Components
                 _accountLock.EnterWriteLock();
                 try
                 {
-                    _accounts = Array.Empty<Account>();
+                    _accounts = [];
                 }
                 finally
                 {
@@ -105,7 +104,7 @@ namespace LocalSmtpRelay.Components
                     {
                         list.Add(MapToAccount(item));
                     }
-                    newAccounts = list.ToArray();
+                    newAccounts = [.. list];
                 }
                 catch (Exception ex)
                 {
@@ -132,6 +131,7 @@ namespace LocalSmtpRelay.Components
                                             string password,
                                             CancellationToken cancellationToken)
         {
+            bool allowAnonymous = _options.CurrentValue.AllowAnonymous;
             _accountLock.EnterReadLock();
             try
             {
@@ -143,10 +143,10 @@ namespace LocalSmtpRelay.Components
                         {
                             bool success = account.Password == password;
                             if (success)
-                                _logger.LogInformation($"User authenticated: '{user}'.");
-                            else
-                                _logger.LogWarning($"Bad authentication password for username '{user}'. Expected password length: '{account.Password.Length}' received password length: '{password?.Length}'");
-                            return Task.FromResult(success);
+                                _logger.LogInformation("User authenticated: '{User}'.", user);
+                            else if (!allowAnonymous)
+                                _logger.LogWarning("Bad authentication password for username '{User}'. Expected password length: '{AccountPasswordLength}' received password length: '{PasswordLength}'", user, account.Password.Length, password?.Length);
+                            return Task.FromResult(success || allowAnonymous);
                         }
                     }
                 }
@@ -156,13 +156,18 @@ namespace LocalSmtpRelay.Components
                 _accountLock.ExitReadLock();
             }
             
-            _logger.LogWarning($"Failed authentication for unknown user '{user}'.");
+            if (allowAnonymous)
+            {
+                return Task.FromResult(true);
+            }
+
+            _logger.LogWarning("Failed authentication for unknown user '{User}'.", user);
             return Task.FromResult(false);
         }
 
         public void Close()
         {
-            _optionsListener.Dispose();
+            _optionsListener?.Dispose();
             _accountLock.Dispose();
         }
     }
