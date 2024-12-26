@@ -1,4 +1,4 @@
-[![Docker](https://img.shields.io/badge/twitter-1DA1F2?style=for-the-badge&logo=twitter&logoColor=white)](https://hub.docker.com/r/eric1901/localsmtprelay)
+[![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://hub.docker.com/r/eric1901/localsmtprelay)
 
 # LocalSmtpRelay
 
