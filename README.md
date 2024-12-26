@@ -8,8 +8,6 @@ There certainly exists lots of programs of this kind, but I thought this was a f
 
 Internally, [MailKit](https://github.com/jstedfast/MailKit) is used for SMTP forwarding (client), [SmtpServer](https://github.com/cosullivan/SmtpServer) is used for local SMTP (server).
 
-<<<<<<< Updated upstream
-=======
 ## Additional features
 
 - Forward some messages to [Prometheus Alertmanager](https://github.com/prometheus/alertmanager). This allows to interface systems with Alertmanager even if they do not support it out of the box, as long as they support SMTP notification messages.
@@ -37,7 +35,6 @@ You can:
 
 See [Configuration](examples/configuration/README.md) in folder examples.
 
->>>>>>> Stashed changes
 ## Usage
 
 See settings in *appsettings.json*, they are mostly self explanatory (they also are detailed later in this readme).
