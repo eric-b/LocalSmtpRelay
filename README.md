@@ -8,6 +8,36 @@ There certainly exists lots of programs of this kind, but I thought this was a f
 
 Internally, [MailKit](https://github.com/jstedfast/MailKit) is used for SMTP forwarding (client), [SmtpServer](https://github.com/cosullivan/SmtpServer) is used for local SMTP (server).
 
+<<<<<<< Updated upstream
+=======
+## Additional features
+
+- Forward some messages to [Prometheus Alertmanager](https://github.com/prometheus/alertmanager). This allows to interface systems with Alertmanager even if they do not support it out of the box, as long as they support SMTP notification messages.
+- Replace subject of some messages with LLM completion based on message body (OpenAI-compatible API like [llama.cpp](https://github.com/ggerganov/llama.cpp/tree/master)).
+- Filter by destination address (if enabled, SMTP will reject unknown recipients).
+- Filter by message size (SMTP will reject message reaching a threshold).
+- Catch up on next program startup (messages not send yet at shutdown are sent on startup).
+- Unsecure Basic authentication (user/password without TLS) and anonymous authentication.
+
+## Limitations
+
+Current known limitations:
+
+- No secure connection for inbound messages. TLS/SSL is supported on destination SMTP / outbound messages.
+
+## Deployment
+
+You can:
+
+- Compile and run binaries (with .NET SDK).
+- Run it with [Docker](examples/docker/) (see folder examples).
+- Run it with [Kubernetes](examples/kubernetes/) (see folder examples).
+
+## Configuration
+
+See [Configuration](examples/configuration/README.md) in folder examples.
+
+>>>>>>> Stashed changes
 ## Usage
 
 See settings in *appsettings.json*, they are mostly self explanatory (they also are detailed later in this readme).
