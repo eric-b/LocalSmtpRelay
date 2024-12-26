@@ -286,3 +286,4 @@ Dockerfile
 .git/
 
 var/
+examples/

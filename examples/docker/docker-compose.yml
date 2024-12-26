@@ -1,7 +1,7 @@
 version: '3.1'
 services:
   localsmtprelay:
-    image: eric1901/localsmtprelay:1.0-net5-buster-slim
+    image: eric1901/localsmtprelay:1.2.0
     ports:
      - "25:25/tcp"
     environment:

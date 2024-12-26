@@ -15,6 +15,13 @@ using MailKit.Security;
 using MediatR;
 using Nito.AsyncEx;
 using System.Collections.Generic;
+using LocalSmtpRelay.Components.AlertManager;
+using ReadSharp;
+using MimeKit.Text;
+using System.Linq;
+using LocalSmtpRelay.Components.Llm;
+using System.Text.RegularExpressions;
+using System.Text.Json;
 
 namespace LocalSmtpRelay.Components
 {
@@ -30,6 +37,8 @@ namespace LocalSmtpRelay.Components
         private readonly SemaphoreSlim _smtpClientSemaphore;
         private readonly Task _bgSendTask;
         private readonly IPublisher _publisher;
+        private readonly AlertManagerForwarder _alertManagerForwarder;
+        private readonly LlmSubjectHelper _llm;
 
         private readonly ConcurrentQueue<FileInfo> _pendingMessagesFromSocketFailures;
 
@@ -75,9 +84,13 @@ namespace LocalSmtpRelay.Components
 
         public SmtpForwarder(IOptionsMonitor<SmtpForwarderOptions> options,
                              IPublisher publisher,
+                             AlertManagerForwarder alertManagerForwarder,
+                             LlmSubjectHelper llm,
                              ILogger<SmtpForwarder> logger,
                              IHostApplicationLifetime appLifetime)
         {
+            _alertManagerForwarder = alertManagerForwarder ?? throw new ArgumentNullException(nameof(alertManagerForwarder));
+            _llm = llm ?? throw new ArgumentNullException(nameof(llm));
             _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _smtpClient = new SmtpClient(new SmtpClientLogger(logger));
@@ -100,6 +113,7 @@ namespace LocalSmtpRelay.Components
         {
             try
             {
+                _logger.LogDebug("LLM options: {Options}", JsonSerializer.Serialize(_options.CurrentValue.LlmEnrichment));
                 while (!cancellationToken.IsCancellationRequested &&
                         _disposeCount == 0)
                 {
@@ -125,6 +139,15 @@ namespace LocalSmtpRelay.Components
             try
             {
                 using MimeMessage message = await MimeMessage.LoadAsync(file.FullName, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+                TryFillTextBodyFromHtml(message);
+                if (await _alertManagerForwarder.TrySendAlert(message, cancellationToken).ConfigureAwait(continueOnCapturedContext: false))
+                {
+                    _logger.LogInformation("SmtpForwarder forwarded message to Alertmanager: {Subject}", message.Subject);
+                    if (!Utility.TryDeleteFile(file))
+                        _logger.LogWarning("Failed to delete: {File}", file);
+                    return;
+                }
+
                 string? defaultRecipient = _options.CurrentValue.DefaultRecipient;
                 if (message.To.Count == 0)
                 {
@@ -139,6 +162,8 @@ namespace LocalSmtpRelay.Components
                         return;
                     }
                 }
+
+                await TryReplaceSubjectWithLlm(message, cancellationToken);
 
                 if (await _smtpClientSemaphore.WaitAsync(TimeSpan.FromSeconds(10), cancellationToken).ConfigureAwait(continueOnCapturedContext: false))
                 {
@@ -187,6 +212,96 @@ namespace LocalSmtpRelay.Components
                         // Ignore any error on timer schedule.
                     }
                 }
+            }
+        }
+
+        /// <summary>
+        /// If a rule matches this message, LLM is applied to the text body
+        /// to replace the subject.
+        /// </summary>
+        /// <param name="message"></param>
+        /// <param name="cancellationToken"></param>
+        /// <returns></returns>
+        private async Task TryReplaceSubjectWithLlm(MimeMessage message, CancellationToken cancellationToken)
+        {
+            string? textBody = message.TextBody;
+            if (textBody is null)
+                return;
+
+            var llmOptions = _options.CurrentValue.LlmEnrichment;
+            var rule = Array.Find(llmOptions.Rules, r =>
+            {
+                string regexInput = string.Empty;
+                if (r.RegexOnField.HasFlag(Model.MessageField.Subject))
+                    regexInput = message.Subject;
+                if (r.RegexOnField.HasFlag(Model.MessageField.Body))
+                    regexInput += $"\r\ntextBody";
+
+                return Regex.IsMatch(regexInput, r.Regex, RegexOptions.IgnoreCase, TimeSpan.FromSeconds(10));
+            });
+
+            if (rule != null)
+            {
+                var result = await _llm.TryGetSubject(rule.UserPrompt ?? llmOptions.UserPrompt, textBody, cancellationToken);
+                if (result != null)
+                {
+                    if (!string.IsNullOrEmpty(rule.SubjectPrefix))
+                        result = $"{rule.SubjectPrefix}{result}";
+
+                    message.Headers.Add("LLM-subject", "1");
+                    message.Headers.Add("LLM-original-subject", message.Subject);
+                    message.Subject = result;
+                }
+            }
+        }
+
+        private void TryFillTextBodyFromHtml(MimeMessage message)
+        {
+            if (message.TextBody is null && message.HtmlBody != null)
+            {
+                string plainText;
+                try
+                {
+                    plainText = HtmlUtilities.ConvertToPlainText(message.HtmlBody);
+                    if (plainText == string.Empty)
+                    {
+                        _logger.LogInformation("Unable to convert HTML body into text for message: {Subject}", message.Subject);
+                        return;
+                    }
+                }
+                catch(Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to convert HTML body into text.");
+                    return;
+                }
+
+                
+                if (message.Body is Multipart multipart && multipart.ContentType.IsMimeType("multipart", "mixed") && multipart.TryGetValue(TextFormat.Html, out var htmlPart))
+                {
+                    var alternativeMultipart = new MultipartAlternative
+                    {
+                        new TextPart(TextFormat.Plain) { Text = plainText },
+                        htmlPart
+                    };
+                    var multipartCopy = new Multipart("mixed") { alternativeMultipart };
+                    foreach (var item in multipart.Where(t => t.IsAttachment))
+                    {
+                        multipartCopy.Add(item);
+                    }
+                    message.Body = multipartCopy;
+                }
+                else
+                {
+                    var alternativeMultipart = new MultipartAlternative
+                    {
+                        new TextPart(TextFormat.Plain) { Text = plainText },
+                        message.Body
+                    };
+
+                    message.Body = new Multipart("mixed") { alternativeMultipart };
+                }
+
+                _logger.LogDebug("Included a text part converted from HTML body: {Subject}", message.Subject);
             }
         }
 

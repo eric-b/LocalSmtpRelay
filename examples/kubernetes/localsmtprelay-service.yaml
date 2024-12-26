@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: localsmtprelay-service
+  labels:
+    app: localsmtprelay
+spec:
+  type: NodePort
+  ports:
+  - port: 26
+    protocol: TCP
+    targetPort: 25
+    nodePort: 30004
+  selector:
+    app: localsmtprelay
