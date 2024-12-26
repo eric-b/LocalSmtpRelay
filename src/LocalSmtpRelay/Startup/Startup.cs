@@ -7,6 +7,9 @@ using SmtpServer.Authentication;
 using IL.FluentValidation.Extensions.Options;
 using LocalSmtpRelay.Components;
 using LocalSmtpRelay.Components.MediatrHandlers;
+using LocalSmtpRelay.Components.AlertManager;
+using System.Net.Http.Headers;
+using LocalSmtpRelay.Components.Llm;
 
 namespace LocalSmtpRelay.Startup
 {
@@ -20,7 +23,7 @@ namespace LocalSmtpRelay.Startup
             
             services.AddSingleton<SmtpForwarder>();
             services // important to configure from config section and not from Bind for IOptionsMonitor.
-                .Configure<SmtpForwarderOptions>(builderContext.Configuration.GetSection(AppSettings.Sections.SmtpForward))
+                .Configure<SmtpForwarderOptions>(builderContext.Configuration.GetSection(AppSettings.Sections.SmtpForwarder))
                 .AddOptions<SmtpForwarderOptions>().Validate<SmtpForwarderOptions, SmtpForwarderOptions.Validator>();
 
             services.AddSingleton<StartupPhase>();
@@ -59,12 +62,65 @@ namespace LocalSmtpRelay.Startup
                         }
                     });
                 }
-                    
-                //TODO: support secure auth with certificate.
                 
                 SmtpServer.ISmtpServerOptions smtpOptions = builder.Build();
                 Console.WriteLine($"SMTP server: {smtpOptions.ServerName} - {smtpOptions.Endpoints[0].Endpoint.Address}:{smtpOptions.Endpoints[0].Endpoint.Port} auth: {smtpOptions.Endpoints[0].AuthenticationRequired} secure: {smtpOptions.Endpoints[0].IsSecure}");
                 return smtpOptions;
+            });
+
+            services.AddSingleton<AlertManagerForwarder>();
+            services.Configure<AlertManagerForwarderOptions>(builderContext.Configuration.GetSection(AppSettings.Sections.AlertManagerForwarder));
+
+            services.PostConfigure<AlertManagerForwarderOptions>(options =>
+            {
+                if (options.BaseUrl is null || options.BaseUrl?.IsAbsoluteUri != true)
+                {
+                    options.Disable = true;
+                }
+            });
+
+            services
+                .AddHttpClient()
+                .AddHttpClient<AlertManagerClient>((svc, configureClient) =>
+                {
+                    var options = svc.GetRequiredService<IOptions<AlertManagerForwarderOptions>>();
+                    var url = options.Value.BaseUrl;
+                    if (url != null && url.IsAbsoluteUri && !options.Value.Disable)
+                    {
+                        if (!url.ToString().EndsWith('/'))
+                            url = new Uri($"{url}/");
+                        configureClient.BaseAddress = url;
+                        configureClient.DefaultRequestHeaders.Accept.Clear();
+                        configureClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                    }
+                });
+
+
+            services.AddSingleton<LlmAlertSummarizer>();
+            services.Configure<LlmAlertSummarizerOptions>(builderContext.Configuration.GetSection(AppSettings.Sections.LlmClient));  // TODO: move settings to alertForwarder.
+
+            services.AddSingleton<LlmSubjectHelper>();
+            services.Configure<LlmSubjectHelperOptions>(builderContext.Configuration.GetSection(AppSettings.Sections.SmtpForwarderLlmParameters));
+
+            services.Configure<LlmChatClientOptions>(builderContext.Configuration.GetSection(AppSettings.Sections.LlmClient));
+            services.AddHttpClient<LlmChatClient>((svc, configureClient) =>
+            {
+                var options = svc.GetRequiredService<IOptions<LlmChatClientOptions>>();
+                var url = options.Value.BaseUrl;
+                if (url != null && url.IsAbsoluteUri)
+                {
+                    if (!url.ToString().EndsWith('/'))
+                        url = new Uri($"{url}/");
+                    configureClient.BaseAddress = url;
+                }
+                configureClient.DefaultRequestHeaders.Accept.Clear();
+                configureClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                if (!string.IsNullOrEmpty(options.Value.ApiKey))
+                    configureClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.Value.ApiKey);
+
+                if (options.Value.RequestTimeout.HasValue)
+                    configureClient.Timeout = options.Value.RequestTimeout.Value;
             });
         }
     }

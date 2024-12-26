@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: localsmtprelay-deployment
+  labels:
+    app: localsmtprelay
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: localsmtprelay
+  template:
+    metadata:
+      labels:
+        app: localsmtprelay
+    spec:
+      volumes:
+      - name: secret-volume
+        secret:
+          secretName: localsmtprelay-dotfile-secret
+      - name: data-volume
+        persistentVolumeClaim:
+          claimName: localsmtprelay-pvc
+      - name: localsmtprelay-config
+        configMap:
+          name: localsmtprelay-config
+      containers:
+      - name: localsmtprelay
+        imagePullPolicy: IfNotPresent
+        image: eric1901/localsmtprelay:1.2.0
+        ports:
+        - containerPort: 25
+        volumeMounts:
+        - name: secret-volume
+          readOnly: true
+          mountPath: "/etc/secret-volume"
+        - name: data-volume
+          mountPath: /var
+        - name: localsmtprelay-config
+          mountPath: /app/appsettings.json
+          subPath: appsettings.json
