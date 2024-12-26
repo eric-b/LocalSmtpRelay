@@ -33,7 +33,7 @@ namespace LocalSmtpRelay.Components
                     message.From.Add(MailboxAddress.Parse(_sendMsgAtStartup.From ?? _sendMsgAtStartup.To));
                     message.To.Add(MailboxAddress.Parse(_sendMsgAtStartup.To));
                     message.Subject = _sendMsgAtStartup.Subject;
-                    message.Body = new TextPart("plain") { Text = !string.IsNullOrEmpty(_sendMsgAtStartup.Body) ? _sendMsgAtStartup.Body : $"Current time: {DateTimeOffset.Now}" };
+                    message.Body = new TextPart("plain") { Text = !string.IsNullOrEmpty(_sendMsgAtStartup.Body) ? _sendMsgAtStartup.Body : $"LocalSmtpRelay service started at: {DateTimeOffset.Now}" };
 
                     await _store.SaveAsync(message, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
                 }

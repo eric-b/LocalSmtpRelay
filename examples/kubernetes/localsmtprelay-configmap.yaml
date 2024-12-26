@@ -1,0 +1,64 @@
+# See https://learn.microsoft.com/en-us/azure/service-bus-messaging/test-locally-with-service-bus-emulator?tabs=docker-linux-container
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: localsmtprelay-config
+  labels:
+    app.kubernetes.io/name: localsmtprelay
+data:
+  appsettings.json: |
+    {
+      "SendMessageAtStartup": {
+        "Subject": "Local SMTP Relay started"
+      },
+      "MessageStore": {
+        "Directory": "/var/tmp/localsmtprelay-msgs",
+        "DeleteRejectedMessages": true,
+        "CatchUpOnStartup": true,
+        "MaxMessageLengthBytes": 512000,
+        "RejectEmptyRecipient": false,
+        "DestinationAddressWhitelist": []
+      },
+      "SmtpServer": {
+        "Hostname": "localhost",
+        "Ports": [
+          {
+            "Number": 25
+          }
+        ],
+        "Accounts": [
+          {
+            "Username": "test",
+            "Password": "test"
+          }
+        ],
+        "AllowAnonymous":  true
+      },
+      "SmtpForwarder": {
+        "MaxQueueLength": 5,
+        "Hostname": "smtp.gmail.com",
+        "EnableSsl": true,
+        "Port": 465,
+        "Authentication": {
+          "Username": "SET YOUR USERNAME",
+          "PasswordFile": "/etc/secret-volume/.secret-file"
+        },
+        "DefaultRecipient": "YOUR EMAIL ADDRESS"
+      },
+      "Logging": {
+        "LogLevel": {
+          "Default": "Information",
+          "Microsoft": "Warning",
+          "Microsoft.Hosting.Lifetime": "Information"
+        },
+        "Console": {
+          "FormatterName": "Simple",
+          "FormatterOptions": {
+            "SingleLine": true,
+            "IncludeScopes": true,
+            "TimestampFormat": "dd/MM HH:mm:ss ",
+            "UseUtcTimestamp": true
+          }
+        }
+      }
+    }
