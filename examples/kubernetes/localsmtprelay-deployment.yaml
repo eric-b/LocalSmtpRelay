@@ -27,7 +27,7 @@ spec:
       containers:
       - name: localsmtprelay
         imagePullPolicy: IfNotPresent
-        image: eric1901/localsmtprelay:1.2.0
+        image: eric1901/localsmtprelay:1.2.1
         ports:
         - containerPort: 25
         volumeMounts:

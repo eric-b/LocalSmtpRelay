@@ -121,3 +121,23 @@ The previous example will replace subject of messages that contain "notification
 
 The prompt sent to LLM will contain default user instructions followed by message body. You can customize the user prompt with a parameter *UserPrompt* inside a rule (it must contain a placeholder `%1` for replacement with message body). You also can customize system prompt with a parameter *SystemPrompt* in section *LlmEnrichment* (no variable placeholder required for the system prompt), or directly in primary configuration of *LlmClient* (see related section in this page).
 Unless for complex configuration, custom system prompt should be in *LlmClient* (shared for any usage of the LLM client).
+
+## Trash messages (void filter)
+
+If an SMTP client repeatedly sends notifications you're not interested in, it may be useful to filter them out from SmtpLocalRelay this way:
+
+```js
+{
+    "SmtpForwarder": {
+        "Void": {
+            "Matchers": [
+                {
+                    "RegexOnField": "Subject, Body",
+                    "Regex": "Arpwatch Notification : flip flop.+?old ethernet address: ab:cd:ef",
+                }
+            ]
+        }
+    }
+}
+```
+

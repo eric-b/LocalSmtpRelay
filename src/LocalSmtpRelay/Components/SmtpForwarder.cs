@@ -22,6 +22,7 @@ using System.Linq;
 using LocalSmtpRelay.Components.Llm;
 using System.Text.RegularExpressions;
 using System.Text.Json;
+using LocalSmtpRelay.Helpers;
 
 namespace LocalSmtpRelay.Components
 {
@@ -140,6 +141,13 @@ namespace LocalSmtpRelay.Components
             {
                 using MimeMessage message = await MimeMessage.LoadAsync(file.FullName, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
                 TryFillTextBodyFromHtml(message);
+                if (ShouldSendToVoid(message))
+                {
+                    if (!Utility.TryDeleteFile(file))
+                        _logger.LogWarning("Failed to delete: {File}", file);
+                    return;
+                }
+
                 if (await _alertManagerForwarder.TrySendAlert(message, cancellationToken).ConfigureAwait(continueOnCapturedContext: false))
                 {
                     _logger.LogInformation("SmtpForwarder forwarded message to Alertmanager: {Subject}", message.Subject);
@@ -215,6 +223,20 @@ namespace LocalSmtpRelay.Components
             }
         }
 
+        private bool ShouldSendToVoid(MimeMessage message)
+        {
+            return Array.Exists(_options.CurrentValue.Void.Matchers, m =>
+            {
+                string regexInput = string.Empty;
+                if (m.RegexOnField.HasFlag(Model.MessageField.Subject))
+                    regexInput = message.Subject;
+                if (m.RegexOnField.HasFlag(Model.MessageField.Body))
+                    regexInput += $"\r\n{message.TextBody}";
+
+                return RegexHelper.IsMatch(regexInput, m.Regex);
+            });
+        }
+
         /// <summary>
         /// If a rule matches this message, LLM is applied to the text body
         /// to replace the subject.
@@ -235,9 +257,9 @@ namespace LocalSmtpRelay.Components
                 if (r.RegexOnField.HasFlag(Model.MessageField.Subject))
                     regexInput = message.Subject;
                 if (r.RegexOnField.HasFlag(Model.MessageField.Body))
-                    regexInput += $"\r\ntextBody";
+                    regexInput += $"\r\n{textBody}";
 
-                return Regex.IsMatch(regexInput, r.Regex, RegexOptions.IgnoreCase, TimeSpan.FromSeconds(10));
+                return RegexHelper.IsMatch(regexInput, r.Regex);
             });
 
             if (rule != null)

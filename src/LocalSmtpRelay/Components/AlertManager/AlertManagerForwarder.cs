@@ -1,4 +1,5 @@
-﻿using LocalSmtpRelay.Model;
+﻿using LocalSmtpRelay.Helpers;
+using LocalSmtpRelay.Model;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MimeKit;
@@ -17,8 +18,6 @@ namespace LocalSmtpRelay.Components.AlertManager
                                               LlmAlertSummarizer llm,
                                               ILogger<AlertManagerForwarder> logger)
     {
-        private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(10);
-
         private readonly bool _disable = options.Value.Disable;
         private readonly MessageRule[] _rules = options.Value.MessageRules ?? [];
         private readonly Dictionary<string, int> defaultAlertNumberBySubject = new(StringComparer.OrdinalIgnoreCase);
@@ -98,7 +97,7 @@ namespace LocalSmtpRelay.Components.AlertManager
                         input += $"\r\n{textBody}";
 
                     if (rule.ResolutionRegex != null &&
-                        Regex.IsMatch(input, rule.ResolutionRegex, RegexOptions.None, RegexTimeout))
+                        RegexHelper.IsMatch(input, rule.ResolutionRegex))
                     {
                         if (alert is null)
                             alert = new Alert();
@@ -112,7 +111,7 @@ namespace LocalSmtpRelay.Components.AlertManager
                         if (!rule.EvaluateOtherRules)
                             break;
                     }
-                    else if (Regex.IsMatch(input, rule.AlertRegex, RegexOptions.None, RegexTimeout))
+                    else if (RegexHelper.IsMatch(input, rule.AlertRegex))
                     {
                         if (alert is null)
                             alert = new Alert();

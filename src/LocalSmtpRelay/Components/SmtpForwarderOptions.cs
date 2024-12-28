@@ -24,6 +24,8 @@ namespace LocalSmtpRelay.Components
         
         public Llm LlmEnrichment { get; } = new();
 
+        public VoidFilter Void { get; } = new();
+
         public class AuthenticationParameters
         {
             public string Username { get; set; } = default!;
@@ -50,7 +52,22 @@ namespace LocalSmtpRelay.Components
             public string? UserPrompt { get; set; }
 
            
-            public LlmRule[] Rules { get; } = [];
+            public LlmRule[] Rules { get; set; } = [];
+        }
+
+        public sealed class VoidFilter 
+        {
+            public VoidMatcherRule[] Matchers { get; set; } = [];
+        }
+
+        public sealed class VoidMatcherRule
+        {
+            /// <summary>
+            /// If regex matches, message will be ignored.
+            /// </summary>
+            public string Regex { get; set; } = default!;
+
+            public MessageField RegexOnField { get; set; }
         }
 
         public sealed class LlmRule

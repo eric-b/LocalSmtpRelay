@@ -14,6 +14,7 @@ Internally, [MailKit](https://github.com/jstedfast/MailKit) is used for SMTP for
 - Replace subject of some messages with LLM completion based on message body (OpenAI-compatible API like [llama.cpp](https://github.com/ggerganov/llama.cpp/tree/master)).
 - Filter by destination address (if enabled, SMTP will reject unknown recipients).
 - Filter by message size (SMTP will reject message reaching a threshold).
+- Void filter (trash messages based on regular expressions).
 - Catch up on next program startup (messages not send yet at shutdown are sent on startup).
 - Unsecure Basic authentication (user/password without TLS) and anonymous authentication.
 
