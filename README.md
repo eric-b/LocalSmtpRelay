@@ -1,3 +1,9 @@
+# This repository has been moved
+
+New location of this repository is: https://codeberg.org/eric-b/LocalSmtpRelay
+
+Following content is not kept up to date.
+
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://hub.docker.com/r/eric1901/localsmtprelay)
 
 # LocalSmtpRelay
